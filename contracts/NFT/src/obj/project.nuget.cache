@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "pipQf+nWxeiHx18j/TavxYCkdnixI+ibPP2pLdWEjF9VC/e3LDn0nXxLNBNAVeB5/J/WA0NyzHNa+AgE7somvQ==",
+  "success": true,
+  "projectFilePath": "E:\\projects\\OngoingProjects\\NFTGram\\neo-contracts\\contracts\\NFT\\src\\NFTContract.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Gabriel\\.nuget\\packages\\neo.buildtasks\\3.5.17\\neo.buildtasks.3.5.17.nupkg.sha512",
+    "C:\\Users\\Gabriel\\.nuget\\packages\\neo.smartcontract.framework\\3.6.0\\neo.smartcontract.framework.3.6.0.nupkg.sha512"
+  ],
+  "logs": []
+}
