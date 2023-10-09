@@ -10,58 +10,92 @@ using Neo.SmartContract.Framework.Services;
 
 namespace NFTAccountImplementation
 {
-    [DisplayName("YourName.WaitContract")]
-    [ManifestExtra("Author", "Your name")]
-    [ManifestExtra("Email", "your@address.invalid")]
+
+    public class InitializeParams
+    {
+        public UInt160 NFTContract =UInt160.Zero;
+        public ByteString TokenId = ByteString.Empty;
+        public BigInteger Kind;
+        public BigInteger Funny;
+        public BigInteger Sad;
+        public BigInteger Angry;
+    }
+
+    [DisplayName("Gabriel.NFTAccountImplementationContract")]
+    [ManifestExtra("Author", "Gabriel Antony Xaviour")]
+    [ManifestExtra("Email", "gabrielantony56@gmail.com")]
     [ManifestExtra("Description", "Describe your contract...")]
     public class NFTAccountImplementationContract : SmartContract
     {
-        const byte Prefix_NumberStorage = 0x00;
+        const byte Prefix_Personality=0x01;
+        const byte Prefix_Posts=0x02;
+        
         const byte Prefix_ContractOwner = 0xFF;
+
         private static Transaction Tx => (Transaction) Runtime.ScriptContainer;
 
-        [DisplayName("NumberChanged")]
-        public static event Action<UInt160, BigInteger> OnNumberChanged;
+        public delegate void OnAccountInitializedDelegate(UInt160 nftScriptHash, ByteString tokenId, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
+        public delegate void OnPostedDelegate(ByteString postId,string content, Boolean isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
 
-        public static bool ChangeNumber(BigInteger positiveNumber)
-        {
-            if (positiveNumber < 0)
-            {
-                throw new Exception("Only positive numbers are allowed.");
-            }
+        [DisplayName("AccountInitialized")]
+        public static event OnAccountInitializedDelegate OnAccountInitialized=default!;
 
-            StorageMap contractStorage = new(Storage.CurrentContext, Prefix_NumberStorage);
-            contractStorage.Put(Tx.Sender, positiveNumber);
-            OnNumberChanged(Tx.Sender, positiveNumber);
-            return true;
-        }
-
-        public static ByteString GetNumber()
-        {
-            StorageMap contractStorage = new(Storage.CurrentContext, Prefix_NumberStorage);
-            return contractStorage.Get(Tx.Sender);
-        }
-
+        [DisplayName("Posted")]
+        public static event OnPostedDelegate OnPosted=default!;
+     
         [DisplayName("_deploy")]
         public static void Deploy(object data, bool update)
         {
             if (update) return;
 
-            var key = new byte[] { Prefix_ContractOwner };
-            Storage.Put(Storage.CurrentContext, key, Tx.Sender);
+            StorageMap personality=new(Storage.CurrentContext,Prefix_Personality);
+
+            InitializeParams initParams = (InitializeParams) StdLib.Deserialize(data);
+
+            Storgae.Put(Storage.CurrentContext,"NFTContract",initParams.NFTContract);
+            Storage.Put(Storage.CurrentContext,"NFTTokenId",initParams.TokenId);
+
+            personality["Kind"]=initParams.Kind;
+            personality["Funny"]=initParams.Funny;
+            personality["Sad"]=initParams.Sad;
+            personality["Angry"]=initParams.Angry;
+
+            OnAccountInitialized(initParams.NFTContract,initParams.TokenId,initParams.Kind,initParams.Funny,initParams.Sad,initParams.Angry);
+
+        }
+
+        public static void Post(string content, Boolean isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId)
+        {
+            if(!Runtime.CheckWitness(GetOwner()))
+            {
+                throw new Exception("Unauthorized");
+            }
+            StorageMap posts = new(Storage.CurrentContext, Prefix_Posts);
+            ByteString postId;// Use Keccack256
+            // Create post
+            // Send call to NFTGram contract to track metrics.
+            OnPosted(postId,content,isReply,replyNFTScriptHash,replyNftTokenId);
+        }
+
+        public static UInt160 GetOwner(){
+            UInt160 nftContract = (UInt160) Storage.Get(Storage.CurrentContext,"NFTContract");
+            ByteString tokenId = (ByteString) Storage.Get(Storage.CurrentContext,"NFTTokenId");
+            return Contract.Call(nftContract,"ownerOf",CallFlags.All,tokenId);
+        }
+
+        public static void DeleteAccount()
+        {
+            
+            if(!Runtime.CheckWitness(GetOwner()))
+            {
+                throw new Exception("Unauthorized");
+            }
+            ContractManagement.Destroy();
         }
         
         public static void Update(ByteString nefFile, string manifest)
         {
-            var key = new byte[] { Prefix_ContractOwner };
-            var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
-
-            if (!contractOwner.Equals(Tx.Sender))
-            {
-                throw new Exception("Only the contract owner can update the contract");
-            }
-
-            ContractManagement.Update(nefFile, manifest, null);
-        }
+            throw new Exception("Disabled");
+        }       
     }
 }
