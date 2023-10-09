@@ -8,21 +8,25 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace Whaty
+namespace NFTGram
 {
-    [DisplayName("YourName.WhatyContract")]
-    [ManifestExtra("Author", "Your name")]
-    [ManifestExtra("Email", "your@address.invalid")]
+    [DisplayName("Gabriel.NFTGramContract")]
+    [ManifestExtra("Author", "Gabriel Antony Xaviour")]
+    [ManifestExtra("Email", "gabrielantony56@gmail.com")]
     [ManifestExtra("Description", "Describe your contract...")]
-    public class WhatyContract : SmartContract
+    public class NFTGramContract : SmartContract
     {
+
+        [InitialValue("NL2UNxotZZ3zmTYN8bSuhKDHnceYRnj6NR", ContractParameterType.Hash160)]
+        static readonly UInt160 Owner = default;
+
         const byte Prefix_NumberStorage = 0x00;
         const byte Prefix_ContractOwner = 0xFF;
         private static Transaction Tx => (Transaction) Runtime.ScriptContainer;
 
         [DisplayName("NumberChanged")]
         public static event Action<UInt160, BigInteger> OnNumberChanged;
-
+        
         public static bool ChangeNumber(BigInteger positiveNumber)
         {
             if (positiveNumber < 0)
@@ -30,22 +34,22 @@ namespace Whaty
                 throw new Exception("Only positive numbers are allowed.");
             }
 
-            StorageMap contractStorage = new(Storage.CurrentContext, Prefix_NumberStorage);
-            contractStorage.Put(Tx.Sender, positiveNumber);
-            OnNumberChanged(Tx.Sender, positiveNumber);
+            Storage.Put(new[] { Prefix_NumberStorage }, positiveNumber);
+            if (Tx != null)
+              OnNumberChanged(Tx.Sender, positiveNumber);
             return true;
         }
 
-        public static ByteString GetNumber()
+        public static BigInteger GetNumber()
         {
-            StorageMap contractStorage = new(Storage.CurrentContext, Prefix_NumberStorage);
-            return contractStorage.Get(Tx.Sender);
+            return (BigInteger)Storage.Get(new[] { Prefix_NumberStorage });
         }
 
         [DisplayName("_deploy")]
         public static void Deploy(object data, bool update)
         {
             if (update) return;
+            
 
             var key = new byte[] { Prefix_ContractOwner };
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);

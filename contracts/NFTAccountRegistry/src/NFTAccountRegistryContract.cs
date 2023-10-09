@@ -8,13 +8,13 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace Wait
+namespace NFTAccountRegistry
 {
-    [DisplayName("YourName.WaitContract")]
+    [DisplayName("Gabreiel.NFTAccountRegistryContract")]
     [ManifestExtra("Author", "Your name")]
     [ManifestExtra("Email", "your@address.invalid")]
     [ManifestExtra("Description", "Describe your contract...")]
-    public class WaitContract : SmartContract
+    public class NFTAccountRegistryContract : SmartContract
     {
         const byte Prefix_NumberStorage = 0x00;
         const byte Prefix_ContractOwner = 0xFF;
