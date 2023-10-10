@@ -60,6 +60,11 @@ namespace NFTAccountRegistry
             Storage.Put(Storage.CurrentContext,"Manifest",manifest);
         }
 
+        public static Boolean CheckAccount(UInt160 scriptHash){
+            StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
+            return accounts[scriptHash];
+        }
+
 
         public static void CreateAccount(UInt160 nftScriptHash, ByteString tokenId)
         {
@@ -95,7 +100,7 @@ namespace NFTAccountRegistry
             ContractState state=(ContractState)ContractManagement.Deploy(nefFile,manifest,StdLib.serialize(initParams));
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
             // Does concat work?
-            accounts[nftScriptHash.Concat(tokenId)] = state.hash;
+            accounts[state.hash] = true;
             OnAccountCreated(nftScriptHash, Tx.Sender, tokenId,salt);
         }
 
