@@ -242,7 +242,6 @@ namespace NFTAccountImplementation
             followingMap[scriptHash] = true;
 
             Contract.Call(scriptHash, "ReceiveFollow", CallFlags.All);
-            Storage.Put(Storage.CurrentContext, "Popularity", popularity);
             Storage.Put(Storage.CurrentContext, "Following", following);
             OnFollowed(scriptHash);
         }
@@ -282,7 +281,7 @@ namespace NFTAccountImplementation
                 throw new Exception("Unauthorized");
             }
 
-            BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
             if (popularity == null)
             {
                 popularity = 1;
@@ -312,6 +311,8 @@ namespace NFTAccountImplementation
 
         public static void ReceiveUnFollow(UInt160 scriptHash)
         {
+            UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
+
             if (Runtime.CheckWitness(GetOwner()) || Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
             {
                 throw new Exception("Unauthorized");
