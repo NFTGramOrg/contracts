@@ -136,7 +136,7 @@ namespace NFTAccountImplementation
             OnPosted(postId, content, isReply, replyNFTScriptHash, replyNftTokenId);
         }
 
-        public static void React(ByteString postId, Reaction reaction)
+        public static void React(UInt160 postId, Reaction reaction)
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
             if (Contract.Callall(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
@@ -144,10 +144,11 @@ namespace NFTAccountImplementation
                 throw new Exception("Unauthorized");
             }
             StorageMap posts = new(Storage.CurrentContext, Prefix_Posts);
+            Post post=posts[postId];
             if (post.reactions[Runtime.CallingScriptHash] == null)
             {
                 post.reactions[Runtime.CallingScriptHash] = reaction;
-                BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+                BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
                 if (popularity == null)
                 {
                     popularity = 1;
@@ -156,6 +157,7 @@ namespace NFTAccountImplementation
                 {
                     popularity += 1;
                 }
+                Storage.Put(Storage.CurrentContext, "Popularity", popularity);
             }
             else
             {
@@ -197,7 +199,6 @@ namespace NFTAccountImplementation
                 post.angry += 1;
             }
 
-            Storage.Put(Storage.CurrentContext, "Popularity", popularity);
             OnReacted(postId);
         }
 
@@ -212,6 +213,7 @@ namespace NFTAccountImplementation
             BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
 
             BigInteger following = (BigInteger)Storage.Get(Storage.CurrentContext, "Following");
+            StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
 
             if (followingMap[scriptHash] == null || followingMap[scriptHash] = false)
             {
@@ -223,6 +225,8 @@ namespace NFTAccountImplementation
                 {
                     following += 1;
                 }
+                BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+
                 if (popularity == null)
                 {
                     popularity = 1;
@@ -231,9 +235,10 @@ namespace NFTAccountImplementation
                 {
                     popularity += 1;
                 }
+                Storage.Put(Storage.CurrentContext, "Popularity", popularity);
+
             }
 
-            StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
             followingMap[scriptHash] = true;
 
             Contract.Call(scriptHash, "ReceiveFollow", CallFlags.All);
@@ -252,7 +257,9 @@ namespace NFTAccountImplementation
 
             StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
             BigInteger following = (BigInteger)Storage.Get(Storage.CurrentContext, "Following");
+  BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
 
+              
             if (followingMap[scriptHash] != null && followingMap[scriptHash] != false)
             {
                 following -= 1;
@@ -268,6 +275,8 @@ namespace NFTAccountImplementation
 
         public static void ReceiveFollow()
         {
+            UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
+
             if (Runtime.CheckWitness(GetOwner()) || Contract.Call(registryAddress, 'checkAccount', CallFlags.All, Runtime.CallingScriptHash) != true)
             {
                 throw new Exception("Unauthorized");
@@ -294,21 +303,21 @@ namespace NFTAccountImplementation
             }
 
             StorageMap followersMap = new(Storage.CurrentContext, Prefix_Followers);
-            followersMap[scriptHash] = true;
+            followersMap[Runtime.CallingScriptHash] = true;
 
             Storage.Put(Storage.CurrentContext, "Popularity", popularity);
             Storage.Put(Storage.CurrentContext, "Followers", followers);
 
         }
 
-        public static void ReceiveUnFollow()
+        public static void ReceiveUnFollow(UInt160 scriptHash)
         {
             if (Runtime.CheckWitness(GetOwner()) || Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
             {
                 throw new Exception("Unauthorized");
             }
 
-            BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
             if (popularity != null && popularity != 0)
             {
                 popularity -= 1;
@@ -320,7 +329,7 @@ namespace NFTAccountImplementation
             }
 
             StorageMap followersMap = new(Storage.CurrentContext, Prefix_Followers);
-            followersMap[scriptHash] = false;
+            followersMap[Runtime.CallingScriptHash] = false;
 
             Storage.Put(Storage.CurrentContext, "Popularity", popularity);
             Storage.Put(Storage.CurrentContext, "Followers", followers);
