@@ -14,7 +14,7 @@ namespace NFTAccountRegistry
 
     public class InitializeParams
     {
-        public UInt160 NFTContract =UInt160.Zero;
+        public UInt160 NFTContract = UInt160.Zero;
         public ByteString TokenId = ByteString.Empty;
         public BigInteger Kind;
         public BigInteger Funny;
@@ -29,23 +29,23 @@ namespace NFTAccountRegistry
     public class NFTAccountRegistryContract : SmartContract
     {
         const byte Prefix_NumberStorage = 0x00;
-        const byte Prefix_AccountsStorage=0x01;
+        const byte Prefix_AccountsStorage = 0x01;
         const byte Prefix_ContractOwner = 0xFF;
 
-        [InitialValue(""),ContractParameterType.UInt160]
-        static readonly UInt160 AccountImplementation =default;
+        [InitialValue(""), ContractParameterType.UInt160]
+        static readonly UInt160 AccountImplementation = default;
 
-        private static Transaction Tx => (Transaction) Runtime.ScriptContainer;
+        private static Transaction Tx => (Transaction)Runtime.ScriptContainer;
 
-        public delegate void OnAccountCreatedDelegate(UInt160 nftScriptHash, UInt160 creator, ByteString tokenId,UInt160 salt);
-        public delegate void OnPostedDelegate(ByteString postId,string content, Boolean isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
+        public delegate void OnAccountCreatedDelegate(UInt160 nftScriptHash, UInt160 creator, ByteString tokenId, UInt160 salt);
+        public delegate void OnPostedDelegate(ByteString postId, string content, Boolean isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
 
 
         [DisplayName("AccountInitialized")]
-        public static event OnAccountInitializedDelegate OnAccountInitialized=default!;
+        public static event OnAccountInitializedDelegate OnAccountInitialized = default!;
 
         [DisplayName("Posted")]
-        public static event OnPostedDelegate OnPosted=default!;
+        public static event OnPostedDelegate OnPosted = default!;
 
         public static void SetupAccountImplementation(ByteString nefFile, string manifest)
         {
@@ -56,11 +56,12 @@ namespace NFTAccountRegistry
             {
                 throw new Exception("Only the contract owner can update the contract");
             }
-            Storage.Put(Storage.CurrentContext,"NefFile",nefFile);
-            Storage.Put(Storage.CurrentContext,"Manifest",manifest);
+            Storage.Put(Storage.CurrentContext, "NefFile", nefFile);
+            Storage.Put(Storage.CurrentContext, "Manifest", manifest);
         }
 
-        public static Boolean CheckAccount(UInt160 scriptHash){
+        public static Boolean CheckAccount(UInt160 scriptHash)
+        {
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
             return accounts[scriptHash];
         }
@@ -68,40 +69,40 @@ namespace NFTAccountRegistry
 
         public static void CreateAccount(UInt160 nftScriptHash, ByteString tokenId)
         {
-            UInt160 nftOwner=Contract.Call(nftContract,"ownerOf",CallFlags.All,tokenId);
+            UInt160 nftOwner = Contract.Call(nftContract, "ownerOf", CallFlags.All, tokenId);
             if (!Runtime.CheckWitness(nftOwner))
             {
                 throw new Exception("Only the nft owner can create an account");
             }
-            UInt160 salt=Runtime.GetRandom();
+            UInt160 salt = Runtime.GetRandom();
 
 
-            UInt160 kind=salt%101;
-            salt=(UInt160)salt/100;
-            UInt160 funny=salt%101;
-            salt=(UInt160)salt/100;
-            UInt160 sad=salt%101;
-            salt=(UInt160)salt/100;
-            UInt160 angry=salt%101;
-            salt=(UInt160)salt/100;
+            UInt160 kind = salt % 101;
+            salt = (UInt160)salt / 100;
+            UInt160 funny = salt % 101;
+            salt = (UInt160)salt / 100;
+            UInt160 sad = salt % 101;
+            salt = (UInt160)salt / 100;
+            UInt160 angry = salt % 101;
+            salt = (UInt160)salt / 100;
 
-            ByteString nefFile=(ByteString)Storage.Get(Storage.CurrentContext,"NefFile");
-            string manifest=(string)Storage.Get(Storage.CurrentContext,"Manifest");
+            ByteString nefFile = (ByteString)Storage.Get(Storage.CurrentContext, "NefFile");
+            string manifest = (string)Storage.Get(Storage.CurrentContext, "Manifest");
 
-            InitializeParams initParams=new InitializeParams();
-            initParams.NFTContract=nftScriptHash;
-            initParams.TokenId=tokenId;
-            initParams.Kind=kind;
-            initParams.Funny=funny;
-            initParams.Sad=sad;
-            initParams.Angry=angry;
+            InitializeParams initParams = new InitializeParams();
+            initParams.NFTContract = nftScriptHash;
+            initParams.TokenId = tokenId;
+            initParams.Kind = kind;
+            initParams.Funny = funny;
+            initParams.Sad = sad;
+            initParams.Angry = angry;
 
             //  Expected ScriptHash
-            ContractState state=(ContractState)ContractManagement.Deploy(nefFile,manifest,StdLib.serialize(initParams));
+            ContractState state = (ContractState)ContractManagement.Deploy(nefFile, manifest, StdLib.serialize(initParams));
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
             // Does concat work?
             accounts[state.hash] = true;
-            OnAccountCreated(nftScriptHash, Tx.Sender, tokenId,salt);
+            OnAccountCreated(nftScriptHash, Tx.Sender, tokenId, salt);
         }
 
 
@@ -114,7 +115,7 @@ namespace NFTAccountRegistry
             var key = new byte[] { Prefix_ContractOwner };
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);
         }
-        
+
         public static void Update(ByteString nefFile, string manifest)
         {
             var key = new byte[] { Prefix_ContractOwner };
