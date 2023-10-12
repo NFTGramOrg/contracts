@@ -12,6 +12,7 @@ namespace NFTAccountImplementation
 {
     public enum Reaction : byte
     {
+        None,
         Kind,
         Funny,
         Sad,
@@ -38,7 +39,7 @@ namespace NFTAccountImplementation
         public BigInteger funny;
         public BigInteger sad;
         public BigInteger angry;
-        public StorageMap reactions;
+        public Map<UInt160,Reaction?> reactions;
     }
 
     [DisplayName("Gabriel.NFTAccountImplementationContract")]
@@ -130,25 +131,26 @@ namespace NFTAccountImplementation
             post.funny = 0;
             post.sad = 0;
             post.angry = 0;
-            post.reactions = new StorageMap(Storage.CurrentContext, postId);
-            // Create post
-            // Send call to NFTGram contract to track metrics.
+            post.reactions = new Map<UInt160, Reaction?>();
+
+            posts.Put(postId,StdLib.Serialize(post));
+
             OnPosted(postId, content, isReply, replyNFTScriptHash, replyNftTokenId);
         }
 
         public static void React(UInt160 postId, Reaction reaction)
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
-            if (Contract.Callall(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
+            if ((Boolean)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
             {
                 throw new Exception("Unauthorized");
             }
             StorageMap posts = new(Storage.CurrentContext, Prefix_Posts);
-            Post post=posts[postId];
-            if (post.reactions[Runtime.CallingScriptHash] == null)
+            Post post=(Post)StdLib.Deserialize(posts.Get(postId));
+            if (post.reactions[Runtime.CallingScriptHash] == null|| post.reactions[Runtime.CallingScriptHash] == Reaction.None)
             {
                 post.reactions[Runtime.CallingScriptHash] = reaction;
-                BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+                BigInteger? popularity = (BigInteger)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
                 if (popularity == null)
                 {
                     popularity = 1;
@@ -157,7 +159,7 @@ namespace NFTAccountImplementation
                 {
                     popularity += 1;
                 }
-                Storage.Put(Storage.CurrentContext, "Popularity", popularity);
+                Storage.Put(Storage.CurrentContext, "Popularity", StdLib.Serialize(popularity));
             }
             else
             {
@@ -210,12 +212,13 @@ namespace NFTAccountImplementation
             {
                 throw new Exception("Unauthorized");
             }
-            BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
 
-            BigInteger following = (BigInteger)Storage.Get(Storage.CurrentContext, "Following");
+            BigInteger? following = (BigInteger)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Following"));
             StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
 
-            if (followingMap[scriptHash] == null || followingMap[scriptHash] = false)
+            Boolean?  isFollowing=(Boolean)StdLib.Deserialize(followingMap.Get(scriptHash));
+
+            if (isFollowing == null || isFollowing == false)
             {
                 if (following == null)
                 {
@@ -225,24 +228,12 @@ namespace NFTAccountImplementation
                 {
                     following += 1;
                 }
-                BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
-
-                if (popularity == null)
-                {
-                    popularity = 1;
-                }
-                else
-                {
-                    popularity += 1;
-                }
-                Storage.Put(Storage.CurrentContext, "Popularity", popularity);
-
             }
 
-            followingMap[scriptHash] = true;
+            followingMap[scriptHash] = StdLib.Serialize(true);
 
             Contract.Call(scriptHash, "ReceiveFollow", CallFlags.All);
-            Storage.Put(Storage.CurrentContext, "Following", following);
+            Storage.Put(Storage.CurrentContext, "Following", StdLib.Serialize(following));
             OnFollowed(scriptHash);
         }
 
@@ -252,36 +243,39 @@ namespace NFTAccountImplementation
             {
                 throw new Exception("Unauthorized");
             }
-            BigInteger populatrity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger? populatrity = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
 
             StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
-            BigInteger following = (BigInteger)Storage.Get(Storage.CurrentContext, "Following");
-  BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger? following = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Following"));
+            BigInteger? popularity =(BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
+
+            Boolean?  isFollowing=(Boolean)StdLib.Deserialize(followingMap.Get(scriptHash));
 
               
-            if (followingMap[scriptHash] != null && followingMap[scriptHash] != false)
+            if (isFollowing != null && isFollowing != false)
             {
                 following -= 1;
                 popularity = -1;
-                following[scriptHash] = false;
+                followingMap[scriptHash] = StdLib.Serialize(false);
             }
 
-            Storage.Put(Storage.CurrentContext, "Popularity", popularity);
-            Storage.Put(Storage.CurrentContext, "Following", following);
+            Storage.Put(Storage.CurrentContext, "Popularity", StdLib.Serialize(popularity));
+            Storage.Put(Storage.CurrentContext, "Following", StdLib.Serialize(following));
             OnUnfollowed(scriptHash);
-
         }
 
         public static void ReceiveFollow()
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
 
-            if (Runtime.CheckWitness(GetOwner()) || Contract.Call(registryAddress, 'checkAccount', CallFlags.All, Runtime.CallingScriptHash) != true)
+            Boolean? isAccount= (Boolean?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
+
+            if (Runtime.CheckWitness(GetOwner()) ||  isAccount == false)
             {
                 throw new Exception("Unauthorized");
             }
 
-            BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger? popularity = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
             if (popularity == null)
             {
                 popularity = 1;
@@ -291,7 +285,7 @@ namespace NFTAccountImplementation
                 popularity += 1;
             }
 
-            BigInteger followers = (BigInteger)Storage.Get(Storage.CurrentContext, "Followers");
+            BigInteger? followers = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Followers"));
             if (followers == null)
             {
                 followers = 1;
@@ -302,45 +296,47 @@ namespace NFTAccountImplementation
             }
 
             StorageMap followersMap = new(Storage.CurrentContext, Prefix_Followers);
-            followersMap[Runtime.CallingScriptHash] = true;
+            followersMap[Runtime.CallingScriptHash] = StdLib.Serialize(true);
 
-            Storage.Put(Storage.CurrentContext, "Popularity", popularity);
-            Storage.Put(Storage.CurrentContext, "Followers", followers);
+            Storage.Put(Storage.CurrentContext, "Popularity", StdLib.Serialize(popularity));
+            Storage.Put(Storage.CurrentContext, "Followers", StdLib.Serialize(followers));
 
         }
 
         public static void ReceiveUnFollow(UInt160 scriptHash)
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
+            Boolean? isAccount= (Boolean?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
 
-            if (Runtime.CheckWitness(GetOwner()) || Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
+            if (Runtime.CheckWitness(GetOwner()) || isAccount != true)
             {
                 throw new Exception("Unauthorized");
             }
 
-            BigInteger popularity = (BigInteger)Storage.Get(Storage.CurrentContext, "Popularity");
+            BigInteger? popularity = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
             if (popularity != null && popularity != 0)
             {
                 popularity -= 1;
             }
-            BigInteger followers = (BigInteger)Storage.Get(Storage.CurrentContext, "Followers");
+            BigInteger? followers = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Followers"));
             if (followers != null && followers != 0)
             {
                 followers -= 1;
             }
 
             StorageMap followersMap = new(Storage.CurrentContext, Prefix_Followers);
-            followersMap[Runtime.CallingScriptHash] = false;
+            followersMap[Runtime.CallingScriptHash] = StdLib.Serialize(false);
 
-            Storage.Put(Storage.CurrentContext, "Popularity", popularity);
-            Storage.Put(Storage.CurrentContext, "Followers", followers);
+            Storage.Put(Storage.CurrentContext, "Popularity", StdLib.Serialize(popularity));
+            Storage.Put(Storage.CurrentContext, "Followers", StdLib.Serialize(followers));
         }
 
         public static UInt160 GetOwner()
         {
             UInt160 nftContract = (UInt160)Storage.Get(Storage.CurrentContext, "NFTContract");
             ByteString tokenId = (ByteString)Storage.Get(Storage.CurrentContext, "NFTTokenId");
-            return Contract.Call(nftContract, "ownerOf", CallFlags.All, tokenId);
+            UInt160 owner=(UInt160) Contract.Call(nftContract, "ownerOf", CallFlags.All, tokenId);
+            return owner;
         }
 
         public static void DeleteAccount()
