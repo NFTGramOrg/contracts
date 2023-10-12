@@ -13,6 +13,7 @@ namespace NFTAccountRegistry
 
     public class InitializeParams
     {
+        public UInt160 RegistryAddress = UInt160.Zero;
         public UInt160 NFTContract = UInt160.Zero;
         public ByteString TokenId = ByteString.Empty;
         public BigInteger Kind;
@@ -27,17 +28,12 @@ namespace NFTAccountRegistry
     [ManifestExtra("Description", "Describe your contract...")]
     public class NFTAccountRegistryContract : SmartContract
     {
-        const byte Prefix_NumberStorage = 0x00;
         const byte Prefix_AccountsStorage = 0x01;
         const byte Prefix_ContractOwner = 0xFF;
 
-        // [InitialValue(""), ContractParameterType.UInt160]
-        // static readonly UInt160 AccountImplementation = default;
-
-        private static Transaction Tx => (Transaction)Runtime.ScriptContainer;
 
         public delegate void OnAccountCreatedDelegate(UInt160 nftScriptHash, UInt160 creator, ByteString tokenId, BigInteger salt);
-        public delegate void OnPostedDelegate(ByteString postId, string content, Boolean isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
+        public delegate void OnPostedDelegate(ByteString postId, string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
 
 
         [DisplayName("AccountInitialized")]
@@ -50,8 +46,13 @@ namespace NFTAccountRegistry
         {
             var key = new byte[] { Prefix_ContractOwner };
             var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
+            var Tx=(Transaction)Runtime.ScriptContainer;
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
 
-            if (!contractOwner.Equals(Tx.Sender))
+            if (contractOwner!=Tx.Sender)
             {
                 throw new Exception("Only the contract owner can update the contract");
             }
@@ -59,32 +60,40 @@ namespace NFTAccountRegistry
             Storage.Put(Storage.CurrentContext, "Manifest", StdLib.Serialize(manifest));
         }
 
-        public static Boolean CheckAccount(UInt160 scriptHash)
+        public static bool CheckAccount(UInt160 scriptHash)
         {
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
-            Boolean? exists = (Boolean?)StdLib.Deserialize(accounts[scriptHash]);
+            bool? exists = (bool?)StdLib.Deserialize(accounts[scriptHash]);
             return exists ?? false;
         }
 
 
         public static void CreateAccount(UInt160 nftScriptHash, ByteString tokenId)
         {
+            
+            var Tx=(Transaction)Runtime.ScriptContainer;
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
             UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, tokenId);
-            if (!Runtime.CheckWitness(nftOwner))
+
+            if (nftOwner!=Tx.Sender)
             {
                 throw new Exception("Only the nft owner can create an account");
             }
+
             BigInteger salt = Runtime.GetRandom();
 
 
             BigInteger kind = salt % 101;
-            salt = (BigInteger)salt / 100;
+            salt = (BigInteger)(salt-kind) / 100;
             BigInteger funny = salt % 101;
-            salt = (BigInteger)salt / 100;
+            salt = (BigInteger)(salt-funny) / 100;
             BigInteger sad = salt % 101;
-            salt = (BigInteger)salt / 100;
+            salt = (BigInteger)(salt-sad) / 100;
             BigInteger angry = salt % 101;
-            salt = (BigInteger)salt / 100;
+            salt = (BigInteger)(salt-angry) / 100;
 
             ByteString nefFile = (ByteString)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "NefFile"));
             string manifest = (string)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Manifest"));
@@ -96,6 +105,7 @@ namespace NFTAccountRegistry
             initParams.Funny = funny;
             initParams.Sad = sad;
             initParams.Angry = angry;
+            initParams.RegistryAddress = Runtime.ExecutingScriptHash;
 
             var state = ContractManagement.Deploy(nefFile, manifest, StdLib.Serialize(initParams));
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
@@ -112,6 +122,11 @@ namespace NFTAccountRegistry
             if (update) return;
 
             var key = new byte[] { Prefix_ContractOwner };
+            var Tx=(Transaction)Runtime.ScriptContainer;
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);
         }
 
@@ -119,8 +134,14 @@ namespace NFTAccountRegistry
         {
             var key = new byte[] { Prefix_ContractOwner };
             var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
+            var Tx=(Transaction)Runtime.ScriptContainer;
 
-            if (!contractOwner.Equals(Tx.Sender))
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
+
+            if (contractOwner!=Tx.Sender)
             {
                 throw new Exception("Only the contract owner can update the contract");
             }

@@ -20,6 +20,7 @@ namespace NFTAccountImplementation
     }
     public class InitializeParams
     {
+        public UInt160 RegistryAddress = UInt160.Zero;
         public UInt160 NFTContract = UInt160.Zero;
         public ByteString TokenId = ByteString.Empty;
         public BigInteger Kind;
@@ -53,9 +54,7 @@ namespace NFTAccountImplementation
         const byte Prefix_Followers = 0x03;
         const byte Prefix_Following = 0x04;
 
-        const byte Prefix_ContractOwner = 0xFF;
 
-        private static Transaction Tx => (Transaction)Runtime.ScriptContainer;
 
         public delegate void OnAccountInitializedDelegate(UInt160 nftScriptHash, ByteString tokenId, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
         public delegate void OnPostedDelegate(UInt160 postId, string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
@@ -95,26 +94,24 @@ namespace NFTAccountImplementation
             personality.Put("Funny", InitializeParams.Funny);
             personality.Put("Sad", InitializeParams.Sad);
             personality.Put("Angry", InitializeParams.Angry);
+            Storage.Put(Storage.CurrentContext, "RegistryAddress",InitializeParams.RegistryAddress);
 
             OnAccountInitialized(InitializeParams.NFTContract, InitializeParams.TokenId, InitializeParams.Kind, InitializeParams.Funny, InitializeParams.Sad, InitializeParams.Angry);
-
         }
 
-        public static void SetRegistryAddress(UInt160 registryAddress)
-        {
-            var key = new byte[] { Prefix_ContractOwner };
-            var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
-
-            if (!contractOwner.Equals(Runtime.CallingScriptHash))
-            {
-                throw new Exception("Only the contract owner can update the contract");
-            }
-            Storage.Put(Storage.CurrentContext, "RegistryAddress", registryAddress);
-        }
+       
 
         public static void Post(string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId)
         {
-            if (!Runtime.CheckWitness(GetOwner()))
+            
+            Transaction Tx = (Transaction)Runtime.ScriptContainer;
+
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
+
+            if (Tx.Sender!=GetOwner())
             {
                 throw new Exception("Unauthorized");
             }
@@ -123,7 +120,7 @@ namespace NFTAccountImplementation
 
             Post post = new Post();
             post.content = content;
-            post.prompter = Runtime.CallingScriptHash;
+            post.prompter = Tx.Sender;
             post.isReply = isReply;
             post.replyNFTScriptHash = replyNFTScriptHash;
             post.replyNftTokenId = replyNftTokenId;
@@ -141,15 +138,21 @@ namespace NFTAccountImplementation
         public static void React(UInt160 postId, Reaction reaction)
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
-            if ((Boolean)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash) != true)
+            Transaction Tx = (Transaction)Runtime.ScriptContainer;
+            
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
+            if ((bool)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Tx.Sender) != true)
             {
                 throw new Exception("Unauthorized");
             }
             StorageMap posts = new(Storage.CurrentContext, Prefix_Posts);
             Post post=(Post)StdLib.Deserialize(posts.Get(postId));
-            if (post.reactions[Runtime.CallingScriptHash] == null|| post.reactions[Runtime.CallingScriptHash] == Reaction.None)
+            if (post.reactions[Tx.Sender] == null|| post.reactions[Tx.Sender] == Reaction.None)
             {
-                post.reactions[Runtime.CallingScriptHash] = reaction;
+                post.reactions[Tx.Sender] = reaction;
                 BigInteger? popularity = (BigInteger)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
                 if (popularity == null)
                 {
@@ -163,7 +166,7 @@ namespace NFTAccountImplementation
             }
             else
             {
-                Reaction oldReaction = (Reaction)post.reactions[Runtime.CallingScriptHash];
+                Reaction oldReaction = (Reaction)post.reactions[Tx.Sender];
                 if (oldReaction == Reaction.Kind)
                 {
                     post.kind -= 1;
@@ -180,7 +183,7 @@ namespace NFTAccountImplementation
                 {
                     post.angry -= 1;
                 }
-                post.reactions[Runtime.CallingScriptHash] = reaction;
+                post.reactions[Tx.Sender] = reaction;
 
             }
 
@@ -208,7 +211,14 @@ namespace NFTAccountImplementation
 
         public static void Follow(UInt160 scriptHash)
         {
-            if (!Runtime.CheckWitness(GetOwner()))
+            Transaction Tx = (Transaction)Runtime.ScriptContainer;
+            
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
+
+            if (Tx.Sender!=GetOwner())
             {
                 throw new Exception("Unauthorized");
             }
@@ -216,7 +226,7 @@ namespace NFTAccountImplementation
             BigInteger? following = (BigInteger)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Following"));
             StorageMap followingMap = new(Storage.CurrentContext, Prefix_Following);
 
-            Boolean?  isFollowing=(Boolean)StdLib.Deserialize(followingMap.Get(scriptHash));
+            bool?  isFollowing=(bool)StdLib.Deserialize(followingMap.Get(scriptHash));
 
             if (isFollowing == null || isFollowing == false)
             {
@@ -239,7 +249,14 @@ namespace NFTAccountImplementation
 
         public static void UnFollow(UInt160 scriptHash)
         {
-            if (!Runtime.CheckWitness(GetOwner()))
+            Transaction Tx = (Transaction)Runtime.ScriptContainer;
+            
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
+            
+            if (Tx.Sender!=GetOwner())
             {
                 throw new Exception("Unauthorized");
             }
@@ -249,7 +266,7 @@ namespace NFTAccountImplementation
             BigInteger? following = (BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Following"));
             BigInteger? popularity =(BigInteger?)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Popularity"));
 
-            Boolean?  isFollowing=(Boolean)StdLib.Deserialize(followingMap.Get(scriptHash));
+            bool?  isFollowing=(bool)StdLib.Deserialize(followingMap.Get(scriptHash));
 
               
             if (isFollowing != null && isFollowing != false)
@@ -258,6 +275,7 @@ namespace NFTAccountImplementation
                 popularity = -1;
                 followingMap[scriptHash] = StdLib.Serialize(false);
             }
+            Contract.Call(scriptHash, "ReceiveUnFollow", CallFlags.All);
 
             Storage.Put(Storage.CurrentContext, "Popularity", StdLib.Serialize(popularity));
             Storage.Put(Storage.CurrentContext, "Following", StdLib.Serialize(following));
@@ -268,9 +286,9 @@ namespace NFTAccountImplementation
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
 
-            Boolean? isAccount= (Boolean?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
+            bool? isAccount= (bool?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
 
-            if (Runtime.CheckWitness(GetOwner()) ||  isAccount == false)
+            if (Runtime.CallingScriptHash==GetOwner() ||  isAccount == false)
             {
                 throw new Exception("Unauthorized");
             }
@@ -303,12 +321,12 @@ namespace NFTAccountImplementation
 
         }
 
-        public static void ReceiveUnFollow(UInt160 scriptHash)
+        public static void ReceiveUnFollow()
         {
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
-            Boolean? isAccount= (Boolean?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
+            bool? isAccount= (bool?)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Runtime.CallingScriptHash);
 
-            if (Runtime.CheckWitness(GetOwner()) || isAccount != true)
+            if (Runtime.CallingScriptHash==GetOwner() || isAccount != true)
             {
                 throw new Exception("Unauthorized");
             }
@@ -334,15 +352,15 @@ namespace NFTAccountImplementation
         public static UInt160 GetOwner()
         {
             UInt160 nftContract = (UInt160)Storage.Get(Storage.CurrentContext, "NFTContract");
-            ByteString tokenId = (ByteString)Storage.Get(Storage.CurrentContext, "NFTTokenId");
-            UInt160 owner=(UInt160) Contract.Call(nftContract, "ownerOf", CallFlags.All, tokenId);
+            ByteString tokenId = Storage.Get(Storage.CurrentContext, "NFTTokenId");
+            UInt160 owner=(UInt160)Contract.Call(nftContract, "ownerOf", CallFlags.All, tokenId);
             return owner;
         }
 
         public static void DeleteAccount()
         {
 
-            if (!Runtime.CheckWitness(GetOwner()))
+            if (Runtime.CallingScriptHash!=GetOwner())
             {
                 throw new Exception("Unauthorized");
             }
