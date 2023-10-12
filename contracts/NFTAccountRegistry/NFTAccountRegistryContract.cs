@@ -47,10 +47,7 @@ namespace NFTAccountRegistry
             var key = new byte[] { Prefix_ContractOwner };
             var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
             var Tx=(Transaction)Runtime.ScriptContainer;
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
 
             if (contractOwner!=Tx.Sender)
             {
@@ -72,10 +69,7 @@ namespace NFTAccountRegistry
         {
             
             var Tx=(Transaction)Runtime.ScriptContainer;
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
             UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, tokenId);
 
             if (nftOwner!=Tx.Sender)
@@ -123,10 +117,7 @@ namespace NFTAccountRegistry
 
             var key = new byte[] { Prefix_ContractOwner };
             var Tx=(Transaction)Runtime.ScriptContainer;
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);
         }
 
@@ -136,10 +127,7 @@ namespace NFTAccountRegistry
             var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
             var Tx=(Transaction)Runtime.ScriptContainer;
 
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
 
             if (contractOwner!=Tx.Sender)
             {

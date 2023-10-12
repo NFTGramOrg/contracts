@@ -83,6 +83,11 @@ namespace NFTAccountImplementation
         {
             if (update) return;
 
+            if(data==null)
+            {
+                return;
+            }
+
             StorageMap personality = new(Storage.CurrentContext, Prefix_Personality);
 
             InitializeParams InitializeParams = (InitializeParams)StdLib.Deserialize((ByteString)data);
@@ -106,10 +111,7 @@ namespace NFTAccountImplementation
             
             Transaction Tx = (Transaction)Runtime.ScriptContainer;
 
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
 
             if (Tx.Sender!=GetOwner())
             {
@@ -140,10 +142,7 @@ namespace NFTAccountImplementation
             UInt160 registryAddress = (UInt160)Storage.Get(Storage.CurrentContext, "RegistryAddress");
             Transaction Tx = (Transaction)Runtime.ScriptContainer;
             
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
             if ((bool)Contract.Call(registryAddress, "checkAccount", CallFlags.All, Tx.Sender) != true)
             {
                 throw new Exception("Unauthorized");
@@ -213,10 +212,7 @@ namespace NFTAccountImplementation
         {
             Transaction Tx = (Transaction)Runtime.ScriptContainer;
             
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
 
             if (Tx.Sender!=GetOwner())
             {
@@ -251,10 +247,7 @@ namespace NFTAccountImplementation
         {
             Transaction Tx = (Transaction)Runtime.ScriptContainer;
             
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+             
             
             if (Tx.Sender!=GetOwner())
             {
