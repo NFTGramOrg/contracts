@@ -117,7 +117,10 @@ namespace NFTAccountRegistry
 
             var key = new byte[] { Prefix_ContractOwner };
             var Tx=(Transaction)Runtime.ScriptContainer;
-             
+            if(!Runtime.CheckWitness(Tx.Sender))
+            {
+                throw new Exception("Sender != signer");
+            }
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);
         }
 
