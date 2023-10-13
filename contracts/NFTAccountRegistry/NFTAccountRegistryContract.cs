@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Numerics;
 
@@ -31,9 +31,13 @@ namespace NFTAccountRegistry
         const byte Prefix_AccountsStorage = 0x01;
         const byte Prefix_ContractOwner = 0xFF;
 
+        [InitialValue("0x12348376f3ad9b6ace71bde78ff237e3f3a8a1d5", Neo.SmartContract.ContractParameterType.Hash160)]
+        private static readonly UInt160 NFTAccountImplemenationScriptHash = default;
 
         public delegate void OnAccountCreatedDelegate(UInt160 nftScriptHash, UInt160 creator, ByteString tokenId, BigInteger salt);
         public delegate void OnPostedDelegate(ByteString postId, string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
+
+        public delegate void OnSaltTestingDelegate(BigInteger salt, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
 
 
         [DisplayName("AccountInitialized")]
@@ -42,36 +46,23 @@ namespace NFTAccountRegistry
         [DisplayName("Posted")]
         public static event OnPostedDelegate OnPosted = default!;
 
-        public static void SetupAccountImplementation(ByteString nefFile, string manifest)
-        {
-            var key = new byte[] { Prefix_ContractOwner };
-            var contractOwner = (UInt160)Storage.Get(Storage.CurrentContext, key);
-            var Tx=(Transaction)Runtime.ScriptContainer;
-             
-
-            if (contractOwner!=Tx.Sender)
-            {
-                throw new Exception("Only the contract owner can update the contract");
-            }
-            Storage.Put(Storage.CurrentContext, "NefFile", StdLib.Serialize(nefFile));
-            Storage.Put(Storage.CurrentContext, "Manifest", StdLib.Serialize(manifest));
-        }
-
-        public static bool CheckAccount(UInt160 scriptHash)
-        {
-            StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
-            bool? exists = (bool?)StdLib.Deserialize(accounts[scriptHash]);
-            return exists ?? false;
-        }
+        [DisplayName("SaltTesting")]
+        public static event OnSaltTestingDelegate OnSaltTesting = default!;
 
 
-        public static void CreateAccount(UInt160 nftScriptHash, ByteString tokenId)
+        public static void CreateAccount(UInt160 nftScriptHash, BigInteger tokenId)
         {
             
             var Tx=(Transaction)Runtime.ScriptContainer;
-             
-            UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, tokenId);
 
+            ByteString _tokenId=(ByteString)tokenId;
+             
+            UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, _tokenId);
+
+            if(Runtime.CheckWitness(Tx.Sender)==false)
+            {
+                throw new Exception("Only the contract owner can create an account");
+            }
             if (nftOwner!=Tx.Sender)
             {
                 throw new Exception("Only the nft owner can create an account");
@@ -89,23 +80,24 @@ namespace NFTAccountRegistry
             BigInteger angry = salt % 101;
             salt = (BigInteger)(salt-angry) / 100;
 
-            ByteString nefFile = (ByteString)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "NefFile"));
-            string manifest = (string)StdLib.Deserialize(Storage.Get(Storage.CurrentContext, "Manifest"));
+            OnSaltTesting(salt, kind, funny, sad, angry);
+
+            var nftAccountImplemenationContract = ContractManagement.GetContract(NFTAccountImplemenationScriptHash);
 
             InitializeParams initParams = new InitializeParams();
             initParams.NFTContract = nftScriptHash;
-            initParams.TokenId = tokenId;
+            initParams.TokenId = _tokenId;
             initParams.Kind = kind;
             initParams.Funny = funny;
             initParams.Sad = sad;
             initParams.Angry = angry;
             initParams.RegistryAddress = Runtime.ExecutingScriptHash;
 
-            var state = ContractManagement.Deploy(nefFile, manifest, StdLib.Serialize(initParams));
+            var state = ContractManagement.Deploy(nftAccountImplemenationContract.Nef, nftAccountImplemenationContract.Manifest.ToString(), StdLib.Serialize(initParams));
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
 
             accounts[state.Hash] = StdLib.Serialize(true);
-            OnAccountCreated(nftScriptHash, Tx.Sender, tokenId, salt);
+            OnAccountCreated(nftScriptHash, Tx.Sender, _tokenId, salt);
         }
 
 
@@ -117,10 +109,7 @@ namespace NFTAccountRegistry
 
             var key = new byte[] { Prefix_ContractOwner };
             var Tx=(Transaction)Runtime.ScriptContainer;
-            if(!Runtime.CheckWitness(Tx.Sender))
-            {
-                throw new Exception("Sender != signer");
-            }
+            
             Storage.Put(Storage.CurrentContext, key, Tx.Sender);
         }
 

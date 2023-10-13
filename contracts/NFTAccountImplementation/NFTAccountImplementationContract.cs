@@ -54,7 +54,7 @@ namespace NFTAccountImplementation
         const byte Prefix_Followers = 0x03;
         const byte Prefix_Following = 0x04;
 
-
+        
 
         public delegate void OnAccountInitializedDelegate(UInt160 nftScriptHash, ByteString tokenId, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
         public delegate void OnPostedDelegate(UInt160 postId, string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
