@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 using Neo;
 using Neo.SmartContract.Framework;
@@ -29,9 +30,13 @@ namespace NFTAccountRegistry
     public class NFTAccountRegistryContract : SmartContract
     {
         const byte Prefix_AccountsStorage = 0x01;
+        private const byte Prefix_Owner = 0x02;
         const byte Prefix_ContractOwner = 0xFF;
 
-        [InitialValue("0x12348376f3ad9b6ace71bde78ff237e3f3a8a1d5", Neo.SmartContract.ContractParameterType.Hash160)]
+        [InitialValue("NL2UNxotZZ3zmTYN8bSuhKDHnceYRnj6NR", Neo.SmartContract.ContractParameterType.Hash160)]
+        private static readonly UInt160 InitialOwner = default; 
+
+        [InitialValue("0x0f43c94893f516e4e26efc493e476dcad9ac5920", Neo.SmartContract.ContractParameterType.Hash160)]
         private static readonly UInt160 NFTAccountImplemenationScriptHash = default;
 
         public delegate void OnAccountCreatedDelegate(UInt160 nftScriptHash, UInt160 creator, ByteString tokenId, BigInteger salt);
@@ -39,6 +44,10 @@ namespace NFTAccountRegistry
 
         public delegate void OnSaltTestingDelegate(BigInteger salt, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
 
+        public delegate void OnSetOwnerDelegate(UInt160 newOwner);
+
+        [DisplayName("SetOwner")]
+        public static event OnSetOwnerDelegate OnSetOwner;
 
         [DisplayName("AccountInitialized")]
         public static event OnAccountCreatedDelegate OnAccountCreated = default!;
@@ -48,22 +57,47 @@ namespace NFTAccountRegistry
 
         [DisplayName("SaltTesting")]
         public static event OnSaltTestingDelegate OnSaltTesting = default!;
+        
+        [Safe]
+        public static UInt160 GetOwner()
+        {
+            var currentOwner = Storage.Get(new[] { Prefix_Owner }); 
 
+            if (currentOwner == null)
+            return InitialOwner;
+
+            return (UInt160)currentOwner;
+        }
+
+        private static bool IsOwner() =>
+            Runtime.CheckWitness(GetOwner());   
+
+        public static void SetOwner(UInt160 newOwner)
+        {
+            if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+            if (newOwner != null && newOwner.IsValid)
+            {
+                Storage.Put(new[] { Prefix_Owner }, newOwner);
+                OnSetOwner(newOwner);
+            }
+        }
+
+        public static bool CheckAccount(){
+            StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
+            bool isAccount=(bool)StdLib.Deserialize(accounts.Get(Runtime.CallingScriptHash));
+            return isAccount;
+        }
 
         public static void CreateAccount(UInt160 nftScriptHash, BigInteger tokenId)
         {
             
-            var Tx=(Transaction)Runtime.ScriptContainer;
 
             ByteString _tokenId=(ByteString)tokenId;
              
             UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, _tokenId);
 
-            if(Runtime.CheckWitness(Tx.Sender)==false)
-            {
-                throw new Exception("Only the contract owner can create an account");
-            }
-            if (nftOwner!=Tx.Sender)
+            if(Runtime.CheckWitness(nftOwner)==false)
             {
                 throw new Exception("Only the nft owner can create an account");
             }
@@ -72,32 +106,34 @@ namespace NFTAccountRegistry
 
 
             BigInteger kind = salt % 101;
-            salt = (BigInteger)(salt-kind) / 100;
+            salt =(salt-kind) / 100;
             BigInteger funny = salt % 101;
-            salt = (BigInteger)(salt-funny) / 100;
+            salt = (salt-funny) / 100;
             BigInteger sad = salt % 101;
-            salt = (BigInteger)(salt-sad) / 100;
+            salt = (salt-sad) / 100;
             BigInteger angry = salt % 101;
-            salt = (BigInteger)(salt-angry) / 100;
+            salt = (salt-angry) / 100;
 
             OnSaltTesting(salt, kind, funny, sad, angry);
 
             var nftAccountImplemenationContract = ContractManagement.GetContract(NFTAccountImplemenationScriptHash);
 
-            InitializeParams initParams = new InitializeParams();
-            initParams.NFTContract = nftScriptHash;
-            initParams.TokenId = _tokenId;
-            initParams.Kind = kind;
-            initParams.Funny = funny;
-            initParams.Sad = sad;
-            initParams.Angry = angry;
-            initParams.RegistryAddress = Runtime.ExecutingScriptHash;
+            InitializeParams initParams = new InitializeParams
+            {
+                NFTContract = nftScriptHash,
+                TokenId = _tokenId,
+                Kind = kind,
+                Funny = funny,
+                Sad = sad,
+                Angry = angry,
+                RegistryAddress = Runtime.ExecutingScriptHash
+            };
 
             var state = ContractManagement.Deploy(nftAccountImplemenationContract.Nef, nftAccountImplemenationContract.Manifest.ToString(), StdLib.Serialize(initParams));
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
 
             accounts[state.Hash] = StdLib.Serialize(true);
-            OnAccountCreated(nftScriptHash, Tx.Sender, _tokenId, salt);
+            OnAccountCreated(nftScriptHash, nftOwner, _tokenId, salt);
         }
 
 
