@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Numerics;
+using Neo;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
@@ -15,63 +16,231 @@ namespace NFT
     [SupportedStandards("NEP-11")]
     [ContractPermission("*", "onNEP11Payment")]
 
-    public class PokemonState : Nep11TokenState
+    public class NFTContract : SmartContract
     {
-        // UInt160 Owner;
+        private const byte Prefix_TotalSupply = 0x00;
+    private const byte Prefix_Balance = 0x01;
+    private const byte Prefix_Account = 0x02;
+    private const byte Prefix_TokenState = 0x03;
+    private const byte Prefix_Owner = 0xfe;
 
-        // string Name;
-        public string Description;
-        public string Image;
+    [InitialValue("NL2UNxotZZ3zmTYN8bSuhKDHnceYRnj6NR", Neo.SmartContract.ContractParameterType.Hash160)]
+    private static readonly UInt160 InitialOwner = default;
+
+    public delegate void OnSetOwnerDelegate(UInt160 account);
+
+    public delegate void OnTransferDelegate(UInt160 from, UInt160 to, BigInteger amount, ByteString tokenId);
+
+        [DisplayName("SetOwner")]
+    public static event OnSetOwnerDelegate OnSetNewOwner;
+
+    [DisplayName("Transfer")]
+    public static event OnTransferDelegate OnTransfer;
+
+    [Safe]
+    public static string Symbol() => "POKIS ";
+
+    [Safe]
+    public static byte Decimals() => 0;
+
+
+    private static ByteString GetKey(ByteString tokenId) =>
+        CryptoLib.Ripemd160(tokenId);
+
+    [Safe]
+    public static BigInteger TotalSupply() =>
+        (BigInteger)Storage.Get(new[] { Prefix_TotalSupply });
+
+    [Safe]
+    public static BigInteger BalanceOf(UInt160 owner)
+    {
+        if (owner == null || !owner.IsValid)
+            throw new Exception("The argument \"owner\" is invalid.");
+        StorageMap balanceMap = new(Storage.CurrentReadOnlyContext, Prefix_Balance);
+        return (BigInteger)balanceMap.Get(owner);
     }
 
-    public class NFTContract : Nep11Token<PokemonState>
+    [Safe]
+    public static UInt160 OwnerOf(ByteString tokenId)
     {
-        const byte Prefix_ContractOwner = 0xFF;
-
-        public override string Symbol() => "POKEMON";
-
-        private static Transaction Tx => (Transaction)Runtime.ScriptContainer;
-
-
-        public static void MintNFT(string name, string description, string image)
-        {
-            if(Runtime.CheckWitness(Tx.Sender) == false)
-                throw new Exception("Only the contract owner can mint NFTs");
-            var state = new PokemonState
-            {
-                Owner = Tx.Sender,
-                Name = name,
-                Description = description,
-                Image = image
-            };
-            BigInteger tokenId=(BigInteger)Storage.Get(Storage.CurrentContext,"TokenId");
-            if(tokenId==0)
-            {
-                Storage.Put(Storage.CurrentContext,"TokenId",StdLib.Serialize(1));
-                tokenId=1;
-                Mint((ByteString)tokenId, state);
-            }else{
-                BigInteger tokenId1=(BigInteger)StdLib.Deserialize(Storage.Get(Storage.CurrentContext,"TokenId"));
-                Storage.Put(Storage.CurrentContext,"TokenId",StdLib.Serialize(tokenId1+1));
-                Mint((ByteString)(tokenId1+1), state);
-            }
-        }
-
-        [DisplayName("_deploy")]
-        public static void Deploy(object data, bool update)
-        {
-            if (update) return;
-
-            var key = new byte[] { Prefix_ContractOwner };
-            Storage.Put(key, Tx.Sender);
-        }
-
-        public static void Update(ByteString nefFile, string manifest)
-        {
-            if (Runtime.CheckWitness(Tx.Sender) == false)
-                throw new Exception("Only the contract owner can update the contract");
-
-            ContractManagement.Update(nefFile, manifest, null);
-        }
+        if (tokenId.Length > 64)
+            throw new Exception("The argument \"owner\" is invalid.");
+        StorageMap tokenStateMap = new(Storage.CurrentReadOnlyContext, Prefix_TokenState);
+        var token = (NFTTokenState)StdLib.Deserialize(tokenStateMap[GetKey(tokenId)]);
+        return token.Owner;
     }
+
+    [Safe]
+    public static Map<string, object> Properties(ByteString tokenId)
+    {
+        if (tokenId.Length > 64)
+            throw new Exception("The argument \"owner\" is invalid.");
+        StorageMap tokenStateMap = new(Storage.CurrentReadOnlyContext, Prefix_TokenState);
+        var token = (NFTTokenState)StdLib.Deserialize(tokenStateMap[GetKey(tokenId)]);
+        return new()
+        {
+            ["name"] = token.Name,
+            ["description"] = token.Description,
+            ["tokenURI"] = "https://www.nftgram.in/nft/"+Runtime.ExecutingScriptHash+"?id="+tokenId,
+            ["image"] = token.Image,
+        };
+    }
+
+    [Safe]
+    public static Iterator Tokens()
+    {
+        StorageMap tokenStateMap = new(Storage.CurrentReadOnlyContext, Prefix_TokenState);
+        return tokenStateMap.Find(FindOptions.ValuesOnly | FindOptions.DeserializeValues | FindOptions.PickField1);
+    }
+
+    [Safe]
+    public static Iterator TokensOf(UInt160 owner)
+    {
+        if (owner == null || !owner.IsValid)
+            throw new Exception("The argument \"owner\" is invalid");
+        StorageMap accountMap = new(Storage.CurrentReadOnlyContext, Prefix_Account);
+        return accountMap.Find(FindOptions.KeysOnly | FindOptions.RemovePrefix);
+    }
+
+    public static bool Transfer(UInt160 to, ByteString tokenId, object data)
+    {
+        if (to == null || !to.IsValid)
+            throw new Exception("The argument \"to\" is invalid.");
+
+        StorageMap tokenStateMap = new(Storage.CurrentContext, Prefix_TokenState);
+
+        var key = GetKey(tokenId);
+        var token = (NFTTokenState)StdLib.Deserialize(tokenStateMap[key]);
+
+        if (token.IsOwner() == false)
+            return false;
+
+        var from = token.Owner;
+
+        if (from != to)
+        {
+            token.Owner = to;
+            tokenStateMap[key] = StdLib.Serialize(token);
+            UpdateBalance(from, tokenId, -1);
+            UpdateBalance(to, tokenId, +1);
+        }
+
+        PostTransfer(from, to, tokenId, data);
+        return true;
+    }
+
+    public static void Burn(ByteString tokenId)
+    {
+         if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+        StorageMap tokenStateMap = new(Storage.CurrentContext, Prefix_TokenState);
+
+        var key = GetKey(tokenId);
+        var token = (NFTTokenState)StdLib.Deserialize(tokenStateMap[key]);
+
+        tokenStateMap.Delete(tokenId);
+        UpdateBalance(token.Owner, tokenId, -1);
+        UpdateTotalSupply(-1);
+        PostTransfer(token.Owner, null, tokenId, null);
+    }
+
+    public static void Mint(ByteString tokenId, NFTTokenState token)
+    {
+
+        if(!IsOwner())
+        {
+            throw new Exception("Only the owner can mint");
+        }
+        StorageMap tokenStateMap = new(Storage.CurrentContext, Prefix_TokenState);
+
+        var key = GetKey(tokenId);
+        tokenStateMap[key] = StdLib.Serialize(token);
+        UpdateBalance(token.Owner, tokenId, 1);
+        UpdateTotalSupply(1);
+        PostTransfer(null, token.Owner, tokenId, null);
+    }
+
+    private static void PostTransfer(UInt160 from, UInt160 to, ByteString tokenId, object data)
+    {
+        OnTransfer(from, to, 1, tokenId);
+        if (to != null && ContractManagement.GetContract(to) != null)
+            Contract.Call(to, "onNEP11Payment", CallFlags.All, from, 1, tokenId, data);
+    }
+
+    private static void UpdateTotalSupply(BigInteger increment)
+    {
+        var key = new byte[] { Prefix_TotalSupply };
+        var amount = (BigInteger)Storage.Get(key);
+        amount += increment;
+        Storage.Put(key, amount);
+    }
+
+    private static bool UpdateBalance(UInt160 owner, ByteString tokenId, BigInteger increment)
+    {
+        StorageMap accountMap = new(Storage.CurrentContext, Prefix_Account);
+        StorageMap balanceMap = new(Storage.CurrentReadOnlyContext, Prefix_Balance);
+
+        var balance = (BigInteger)balanceMap.Get(owner);
+
+        balance += increment;
+
+        if (balance < 0)
+            return false;
+        if (balance.IsZero)
+            balanceMap.Delete(owner);
+        else
+            balanceMap.Put(owner, balance);
+
+        var key = owner + tokenId;
+
+        if (increment > 0)
+            accountMap.Put(key, 0);
+        else
+            accountMap.Delete(key);
+
+        return true;
+    }
+    
+
+    [Safe]
+    public static UInt160 GetOwner()
+    {
+        var currentOwner = Storage.Get(new[] { Prefix_Owner });
+
+        if (currentOwner == null)
+            return InitialOwner;
+
+        return (UInt160)currentOwner;
+    }
+
+    private static bool IsOwner() =>
+        Runtime.CheckWitness(GetOwner());
+
+    public static void SetOwner(UInt160 account)
+    {
+        if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+        if (account == null || account.IsValid == false)
+            throw new InvalidOperationException("Account is invalid!");
+        Storage.Put(new[] { Prefix_Owner }, account);
+        OnSetNewOwner(account);
+    }
+    public static bool Verify() => IsOwner();
+
+    public static void Update(ByteString nefFile, string manifest)
+    {
+        if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+        ContractManagement.Update(nefFile, manifest);
+    }
+
+    public static void Destroy()
+    {
+        if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+        ContractManagement.Destroy();
+    }
+    }
+
+    
 }
