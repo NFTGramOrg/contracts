@@ -144,13 +144,13 @@ namespace NFT
             PostTransfer(token.Owner, null, tokenId, null);
         }
 
-        public static void Create(BigInteger tokenId,string name,UInt160 owner, string description,string image)
+        public static void Create(string name,UInt160 owner, string description,string image)
         {
             if (!IsOwner())
             {
                 throw new Exception("Only the owner can mint");
             }
-            Mint((ByteString) tokenId,new NFTTokenState()
+            Mint(CryptoLib.Ripemd160(name),new NFTTokenState()
             {
                 Owner = owner,
                 Name = name,
