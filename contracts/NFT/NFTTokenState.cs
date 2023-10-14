@@ -9,7 +9,7 @@ public class NFTTokenState
     public string Name;
 
     public string Description;
-    public ulong Image;
+    public string Image;
 
     public bool IsOwner() =>
         Runtime.CheckWitness(Owner);

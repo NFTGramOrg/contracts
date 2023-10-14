@@ -144,13 +144,23 @@ namespace NFT
             PostTransfer(token.Owner, null, tokenId, null);
         }
 
-        public static void Mint(ByteString tokenId, NFTTokenState token)
+        public static void Create(BigInteger tokenId,string name,UInt160 owner, string description,string image)
         {
-
             if (!IsOwner())
             {
                 throw new Exception("Only the owner can mint");
             }
+            Mint((ByteString) tokenId,new NFTTokenState()
+            {
+                Owner = owner,
+                Name = name,
+                Description = description,
+                Image = image
+            });
+        }
+
+        private static void Mint(ByteString tokenId, NFTTokenState token)
+        {
             StorageMap tokenStateMap = new(Storage.CurrentContext, Prefix_TokenState);
 
             var key = GetKey(tokenId);
