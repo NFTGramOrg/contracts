@@ -33,9 +33,6 @@ namespace NFTAccountImplementation
     {
         public string content;
         public UInt160 prompter;
-        public bool isReply;
-        public UInt160 replyNFTScriptHash;
-        public ByteString replyNftTokenId;
         public BigInteger kind;
         public BigInteger funny;
         public BigInteger sad;
@@ -54,10 +51,8 @@ namespace NFTAccountImplementation
         const byte Prefix_Followers = 0x03;
         const byte Prefix_Following = 0x04;
 
-        
-
         public delegate void OnAccountInitializedDelegate(UInt160 nftScriptHash, ByteString tokenId, BigInteger kind, BigInteger funny, BigInteger sad, BigInteger angry);
-        public delegate void OnPostedDelegate(UInt160 postId, string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId);
+        public delegate void OnPostedDelegate(UInt160 postId, string content);
         public delegate void OnFollowedDelegate(UInt160 nftScriptHash);
         public delegate void OnFollowReceivedDelegate(UInt160 nftScriptHash);
         public delegate void OnUnfollowReceivedDelegate(UInt160 nftScriptHash);
@@ -107,10 +102,10 @@ namespace NFTAccountImplementation
             Storage.Put(Storage.CurrentContext, "NFTContract", InitializeParams.NFTContract);
             Storage.Put(Storage.CurrentContext, "NFTTokenId", InitializeParams.TokenId);
 
-            personality.Put("Kind", InitializeParams.Kind);
-            personality.Put("Funny", InitializeParams.Funny);
-            personality.Put("Sad", InitializeParams.Sad);
-            personality.Put("Angry", InitializeParams.Angry);
+            personality.Put("Kind", StdLib.Serialize(InitializeParams.Kind));
+            personality.Put("Funny", StdLib.Serialize(InitializeParams.Funny));
+            personality.Put("Sad", StdLib.Serialize(InitializeParams.Sad));
+            personality.Put("Angry", StdLib.Serialize(InitializeParams.Angry));
             Storage.Put(Storage.CurrentContext, "RegistryAddress",InitializeParams.RegistryAddress);
 
             OnAccountInitialized(InitializeParams.NFTContract, InitializeParams.TokenId, InitializeParams.Kind, InitializeParams.Funny, InitializeParams.Sad, InitializeParams.Angry);
@@ -118,25 +113,36 @@ namespace NFTAccountImplementation
 
        
 
-        public static void Post(string content, bool isReply, UInt160 replyNFTScriptHash, ByteString replyNftTokenId)
+        public static void Post(string prompt)
         {
-            
-
-             
             UInt160 nftOwner=GetOwner();
             if (Runtime.CheckWitness(nftOwner))
             {
                 throw new Exception("Unauthorized");
             }
+            StorageMap personality = new(Storage.CurrentContext, Prefix_Personality);
+            BigInteger? kind = (BigInteger?)StdLib.Deserialize(personality.Get("Kind"));
+            BigInteger? funny = (BigInteger?)StdLib.Deserialize(personality.Get("Funny"));
+            BigInteger? sad = (BigInteger?)StdLib.Deserialize(personality.Get("Sad"));
+            BigInteger? angry = (BigInteger?)StdLib.Deserialize(personality.Get("Angry"));
+            Oracle.Request("https://nftgram.in/api/generate", "$.content", "callback", new object[] { prompt, kind, funny,sad,angry },Oracle.MinimumResponseFee);
+
+        }
+        public static void Callback(string url, byte[] userData, int code, byte[] result)
+        {
+            if (Runtime.CallingScriptHash != Oracle.Hash) throw new Exception("Unauthorized!");
+
+            if (code != 0x00) throw new Exception("Error code: "+ code);
+
+            string content = result.ToString();
+            UInt160 nftOwner=GetOwner();
+
             StorageMap posts = new(Storage.CurrentContext, Prefix_Posts);
             UInt160 postId = (UInt160)CryptoLib.Ripemd160(CryptoLib.Sha256(content));
 
             Post post = new Post();
             post.content = content;
             post.prompter = nftOwner;
-            post.isReply = isReply;
-            post.replyNFTScriptHash = replyNFTScriptHash;
-            post.replyNftTokenId = replyNftTokenId;
             post.kind = 0;
             post.funny = 0;
             post.sad = 0;
@@ -145,7 +151,7 @@ namespace NFTAccountImplementation
 
             posts.Put(postId,StdLib.Serialize(post));
 
-            OnPosted(postId, content, isReply, replyNFTScriptHash, replyNftTokenId);
+            OnPosted(postId, content);
         }
 
         public static void ReceiveReact(UInt160 postId,Reaction reaction)
