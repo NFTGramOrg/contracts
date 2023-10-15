@@ -144,13 +144,13 @@ namespace NFT
             PostTransfer(token.Owner, null, tokenId, null);
         }
 
-        public static void Create(string name,UInt160 owner, string description,string image)
+        public static void Create(BigInteger tokenId,string name,UInt160 owner, string description,string image)
         {
             if (!IsOwner())
             {
                 throw new Exception("Only the owner can mint");
             }
-            Mint(CryptoLib.Ripemd160(name),new NFTTokenState()
+            Mint(tokenId,new NFTTokenState()
             {
                 Owner = owner,
                 Name = name,
@@ -159,15 +159,15 @@ namespace NFT
             });
         }
 
-        private static void Mint(ByteString tokenId, NFTTokenState token)
+        private static void Mint(BigInteger tokenId, NFTTokenState token)
         {
             StorageMap tokenStateMap = new(Storage.CurrentContext, Prefix_TokenState);
 
-            var key = GetKey(tokenId);
+            var key = GetKey((ByteString)tokenId);
             tokenStateMap[key] = StdLib.Serialize(token);
-            UpdateBalance(token.Owner, tokenId, 1);
+            UpdateBalance(token.Owner, (ByteString)tokenId, 1);
             UpdateTotalSupply(1);
-            PostTransfer(null, token.Owner, tokenId, null);
+            PostTransfer(null, token.Owner, (ByteString)tokenId, null);
         }
 
         private static void PostTransfer(UInt160 from, UInt160 to, ByteString tokenId, object data)
@@ -188,7 +188,7 @@ namespace NFT
         private static bool UpdateBalance(UInt160 owner, ByteString tokenId, BigInteger increment)
         {
             StorageMap accountMap = new(Storage.CurrentContext, Prefix_Account);
-            StorageMap balanceMap = new(Storage.CurrentReadOnlyContext, Prefix_Balance);
+            StorageMap balanceMap = new(Storage.CurrentContext, Prefix_Balance);
 
             var balance = (BigInteger)balanceMap.Get(owner);
 
@@ -223,8 +223,7 @@ namespace NFT
             return (UInt160)currentOwner;
         }
 
-        private static bool IsOwner() =>
-            Runtime.CheckWitness(GetOwner());
+       
 
         public static void SetOwner(UInt160 account)
         {
@@ -236,6 +235,9 @@ namespace NFT
             OnSetNewOwner(account);
         }
         public static bool Verify() => IsOwner();
+
+         private static bool IsOwner() =>
+            Runtime.CheckWitness(GetOwner());
 
         public static void Update(ByteString nefFile, string manifest)
         {
