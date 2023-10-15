@@ -29,9 +29,12 @@ namespace NFTAccountRegistry
     [ManifestExtra("Description", "Describe your contract...")]
     public class NFTAccountRegistryContract : SmartContract
     {
-        const byte Prefix_AccountsStorage = 0x01;
+        private const byte Prefix_AccountsStorage = 0x01;
         private const byte Prefix_Owner = 0x02;
-        const byte Prefix_ContractOwner = 0xFF;
+
+        private const byte Prefix_Manifest=0x03;
+
+        private const byte Prefix_ContractOwner = 0xFF;
 
         [InitialValue("NL2UNxotZZ3zmTYN8bSuhKDHnceYRnj6NR", Neo.SmartContract.ContractParameterType.Hash160)]
         private static readonly UInt160 InitialOwner = default; 
@@ -86,36 +89,52 @@ namespace NFTAccountRegistry
             }
         }
 
+        public static void SetManifest(string manifest)
+        {
+            if (IsOwner() == false)
+            throw new InvalidOperationException("No Authorization!");
+            Storage.Put(new[] { Prefix_Manifest },manifest); 
+        }
+
+        public static string GetManifest()
+        {
+            return (string)Storage.Get(Storage.CurrentContext, new byte[] { Prefix_Manifest });
+        }
+
         public static bool CheckAccount(){
             StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
             bool isAccount=(bool)StdLib.Deserialize(accounts.Get(Runtime.CallingScriptHash));
             return isAccount;
         }
 
+
+        public static bool CheckNftOwner(UInt160 nftScriptHash, ByteString tokenId)
+        {
+            UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, tokenId);
+            return Runtime.CheckWitness(nftOwner);
+
+        }
+
         public static void CreateAccount(UInt160 nftScriptHash, ByteString tokenId)
         {
-            
-
-            // Check if NFT owner is the caller
             UInt160 nftOwner = (UInt160)Contract.Call(nftScriptHash, "ownerOf", CallFlags.All, tokenId);
 
-            if(Runtime.CheckWitness(nftOwner)==false)
-            {
-                throw new Exception("Only the nft owner can create an account");
-            }
-
-
+            // if(Runtime.CheckWitness(nftOwner)==false)
+            // {
+            //     throw new Exception("Only the nft owner can create an account");
+            // }
+        
             // Get Randomness to initialize the account personality
             BigInteger salt = Runtime.GetRandom();
 
 
-            BigInteger kind = salt % 101;
+            BigInteger kind = salt%100;
             salt =(salt-kind) / 100;
-            BigInteger funny = salt % 101;
+            BigInteger funny = salt%100;
             salt = (salt-funny) / 100;
-            BigInteger sad = salt % 101;
+            BigInteger sad =  salt%100;
             salt = (salt-sad) / 100;
-            BigInteger angry = salt % 101;
+            BigInteger angry =  salt%100;
             salt = (salt-angry) / 100;
 
             OnSaltTesting(salt, kind, funny, sad, angry);
@@ -134,21 +153,22 @@ namespace NFTAccountRegistry
             };
 
             // deploy the NFTAccount contract
-            var state = ContractManagement.Deploy(nftAccountImplemenationContract.Nef, nftAccountImplemenationContract.Manifest.ToString(), StdLib.Serialize(initParams));
-            StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
+            string manifest=(string)Storage.Get(Storage.CurrentContext, new byte[] { Prefix_Manifest });
+            var state = ContractManagement.Deploy(nftAccountImplemenationContract.Nef, manifest, StdLib.Serialize(initParams)); // HERE IS THE ERROR!!!!!
+            // StorageMap accounts = new(Storage.CurrentContext, Prefix_AccountsStorage);
 
-            accounts[state.Hash] = StdLib.Serialize(true);
+            // accounts[state.Hash] = StdLib.Serialize(true);
 
-            // Register a NNS name 
-            Map<string, object> props=(Map<string, object>)Contract.Call(nftScriptHash, "properties", CallFlags.All);
-            string name=(string)props["name"];
+            // // Register a NNS name 
+            // Map<string, object> props=(Map<string, object>)Contract.Call(nftScriptHash, "properties", CallFlags.All);
+            // string name=(string)props["name"];
 
-            bool isAvailable=(bool)Contract.Call(NamingServiceScriptHash,"isAvailable",CallFlags.All,name);
+            // bool isAvailable=(bool)Contract.Call(NamingServiceScriptHash,"isAvailable",CallFlags.All,name);
             
-            if(isAvailable)
-            {
-                Contract.Call(NamingServiceScriptHash,"register",CallFlags.All,name.ToLower()+".nftgram.neo",state.Hash);
-            }
+            // if(isAvailable)
+            // {
+            //     Contract.Call(NamingServiceScriptHash,"register",CallFlags.All,"hello"+".nftgram.neo",state.Hash);
+            // }
 
             // Emit event
             OnAccountCreated(nftScriptHash, nftOwner, tokenId, salt);
